@@ -1,0 +1,28 @@
+services:
+  llama-cpp:
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda
+    container_name: llama-cpp
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./models:/models
+    environment:
+      HF_TOKEN: ${HF_TOKEN:-}
+      LLAMA_CACHE: /models/cache
+    # https://unsloth.ai/docs/models/gemma-4
+    command: >
+      -hf unsloth/gemma-4-31B-it-GGUF:UD-Q4_K_XL
+      --alias gemma-4-31b-it
+      --host 0.0.0.0
+      --port 8000
+      -c 4096
+      --temp 1.0
+      --top-p 0.95
+      --top-k 64
+      --reasoning off
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
