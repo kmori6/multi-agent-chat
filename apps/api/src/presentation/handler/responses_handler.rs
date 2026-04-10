@@ -20,7 +20,7 @@ pub struct ResponsesRequest {
     stream: Option<bool>,
 }
 
-pub async fn responses(Json(payload): Json<ResponsesRequest>) -> Response {
+pub async fn responses_handler(Json(payload): Json<ResponsesRequest>) -> Response {
     let client = Client::new();
     let url = "http://localhost:8000/v1/responses";
 

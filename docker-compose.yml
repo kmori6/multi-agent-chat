@@ -26,3 +26,50 @@ services:
           devices:
             - driver: nvidia
               capabilities: [gpu]
+
+  postgres:
+    image: postgres:18.3
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: example
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./flyway/postgresql:/var/lib/postgresql
+
+  flyway-postgres:
+    build:
+      context: .
+      dockerfile: docker/flyway.Dockerfile
+    command: ["migrate"]
+    environment:
+      - FLYWAY_URL=jdbc:postgresql://postgres:5432/postgres
+      - FLYWAY_SCHEMAS=public
+      - FLYWAY_USER=postgres
+      - FLYWAY_PASSWORD=example
+      - FLYWAY_CONNECT_RETRIES=60
+    # Mount host directory for hot-reload during local development
+    # This overrides the /flyway/sql copied in Dockerfile with postgres-specific migrations
+    volumes:
+      - ./flyway/sql/postgres:/flyway/sql
+    depends_on:
+      - postgres
+
+  flyway-thread:
+    build:
+      context: .
+      dockerfile: docker/flyway.Dockerfile
+    command: ["migrate"]
+    environment:
+      - FLYWAY_URL=jdbc:postgresql://postgres:5432/thread
+      - FLYWAY_SCHEMAS=public
+      - FLYWAY_USER=postgres
+      - FLYWAY_PASSWORD=example
+      - FLYWAY_CONNECT_RETRIES=60
+    # Mount host directory for hot-reload during local development
+    # This overrides the /flyway/sql copied in Dockerfile with auth-specific migrations
+    volumes:
+      - ./flyway/sql/thread:/flyway/sql
+    depends_on:
+      - postgres
+      - flyway-postgres
