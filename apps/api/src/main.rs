@@ -5,6 +5,7 @@ use axum::{
 use dotenvy::dotenv;
 use presentation::handler::create_message_handler::create_message_handler;
 use presentation::handler::create_thread_handler::create_thread_handler;
+use presentation::handler::get_message_handler::get_message_handler;
 use presentation::handler::healthcheck_handler::healthcheck_handler;
 use presentation::handler::responses_handler::responses_handler;
 use sqlx::{Pool, Postgres, postgres::PgPoolOptions};
@@ -37,6 +38,7 @@ async fn main() {
         .route("/responses", post(responses_handler))
         .route("/thread", post(create_thread_handler))
         .route("/thread/{id}/messages", post(create_message_handler))
+        .route("/thread/{id}/messages", get(get_message_handler))
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
