@@ -5,44 +5,76 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sqlx::postgres::PgPoolOptions;
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct CreateAgentRequest {
-    pub name: Option<String>,
-    pub persona: Option<String>,
+    pub name: String,
+    pub persona: String,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct CreateThreadRequest {
-    pub title: Option<String>,
-    pub agent_a: Option<CreateAgentRequest>,
-    pub agent_b: Option<CreateAgentRequest>,
+    pub title: String,
+    pub agent_a: CreateAgentRequest,
+    pub agent_b: CreateAgentRequest,
 }
 
 #[derive(Debug, Serialize)]
 pub struct CreateThreadResponse {
     pub id: Uuid,
-    pub title: Option<String>,
+    pub title: String,
     pub status: String,
-    pub agent_a: Option<CreateAgentRequest>,
-    pub agent_b: Option<CreateAgentRequest>,
+    pub agent_a: CreateAgentRequest,
+    pub agent_b: CreateAgentRequest,
     pub created_at: DateTime<Utc>,
 }
 
 pub async fn create_thread_handler(Json(payload): Json<CreateThreadRequest>) -> Response {
-    let title = payload.title;
-    let agent_a = payload.agent_a;
-    let agent_b = payload.agent_b;
     let id = Uuid::new_v4();
-    let created_at = Utc::now();
+    let now = Utc::now();
+
+    let pool = PgPoolOptions::new()
+        .max_connections(5)
+        .connect("postgres://postgres:example@localhost:5432/thread")
+        .await
+        .expect("failed to connect to postgres");
+    let _ = sqlx::query(
+        r#"
+        INSERT INTO threads (
+            id,
+            title,
+            status,
+            agent_a_name,
+            agent_a_persona,
+            agent_b_name,
+            agent_b_persona,
+            created_at,
+            updated_at
+        )
+        VALUES ($1, $2, 'idle', $3, $4, $5, $6, $7, $8)
+        "#,
+    )
+    .bind(id)
+    .bind(&payload.title)
+    .bind(&payload.agent_a.name)
+    .bind(&payload.agent_a.persona)
+    .bind(&payload.agent_b.name)
+    .bind(&payload.agent_b.persona)
+    .bind(now)
+    .bind(now)
+    .fetch_one(&pool)
+    .await;
+
     let response = CreateThreadResponse {
         id: id,
-        title: title,
+        title: payload.title,
         status: "idle".to_string(),
-        agent_a: agent_a,
-        agent_b: agent_b,
-        created_at: created_at,
+        agent_a: payload.agent_a,
+        agent_b: payload.agent_b,
+        created_at: now,
     };
+
     (StatusCode::CREATED, Json(response)).into_response()
 }
