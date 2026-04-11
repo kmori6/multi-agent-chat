@@ -1,3 +1,5 @@
+use crate::AppState;
+use axum::extract::State;
 use axum::{
     Json,
     http::StatusCode,
@@ -5,7 +7,7 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::postgres::PgPoolOptions;
+use sqlx::Row;
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -31,16 +33,14 @@ pub struct CreateThreadResponse {
     pub created_at: DateTime<Utc>,
 }
 
-pub async fn create_thread_handler(Json(payload): Json<CreateThreadRequest>) -> Response {
+pub async fn create_thread_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<CreateThreadRequest>,
+) -> Response {
     let id = Uuid::new_v4();
     let now = Utc::now();
 
-    let pool = PgPoolOptions::new()
-        .max_connections(5)
-        .connect("postgres://postgres:example@localhost:5432/thread")
-        .await
-        .expect("failed to connect to postgres");
-    let _ = sqlx::query(
+    let row = match sqlx::query(
         r#"
         INSERT INTO threads (
             id,
@@ -54,6 +54,15 @@ pub async fn create_thread_handler(Json(payload): Json<CreateThreadRequest>) -> 
             updated_at
         )
         VALUES ($1, $2, 'idle', $3, $4, $5, $6, $7, $8)
+        RETURNING
+            id,
+            title,
+            status,
+            agent_a_name,
+            agent_a_persona,
+            agent_b_name,
+            agent_b_persona,
+            created_at
         "#,
     )
     .bind(id)
@@ -64,16 +73,32 @@ pub async fn create_thread_handler(Json(payload): Json<CreateThreadRequest>) -> 
     .bind(&payload.agent_b.persona)
     .bind(now)
     .bind(now)
-    .fetch_one(&pool)
-    .await;
+    .fetch_one(&state.pool)
+    .await
+    {
+        Ok(row) => row,
+        Err(error) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": error.to_string() })),
+            )
+                .into_response();
+        }
+    };
 
     let response = CreateThreadResponse {
-        id: id,
-        title: payload.title,
-        status: "idle".to_string(),
-        agent_a: payload.agent_a,
-        agent_b: payload.agent_b,
-        created_at: now,
+        id: row.get("id"),
+        title: row.get("title"),
+        status: row.get("status"),
+        agent_a: CreateAgentRequest {
+            name: row.get("agent_a_name"),
+            persona: row.get("agent_a_persona"),
+        },
+        agent_b: CreateAgentRequest {
+            name: row.get("agent_b_name"),
+            persona: row.get("agent_b_persona"),
+        },
+        created_at: row.get("created_at"),
     };
 
     (StatusCode::CREATED, Json(response)).into_response()
