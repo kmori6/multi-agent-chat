@@ -1,7 +1,7 @@
 use crate::AppState;
-use axum::extract::State;
 use axum::{
     Json,
+    extract::State,
     http::StatusCode,
     response::{IntoResponse, Response},
 };
